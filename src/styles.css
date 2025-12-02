@@ -1,0 +1,75 @@
+:root{
+	--bg:#0f1720;
+	--sidebar:#0b1217;
+	--sidebar-2:#0e1620;
+	--primary:#5865f2;
+	--muted:#8b98a8;
+	--panel:#111420;
+	--message-bg:#2f3640;
+	--mine-bg:#3b5a40;
+	--accent:#4f545c;
+}
+*{box-sizing:border-box}
+body{font-family:Inter,system-ui,Arial;margin:0;padding:0;background:var(--bg);color:#e6eef6}
+.app-root{display:grid;grid-template-columns:240px 1fr;height:100vh}
+
+/* Sidebar (channels) */
+.channel-list{background:var(--sidebar);padding:12px;border-right:1px solid rgba(255,255,255,0.03);min-height:100vh}
+.channel-list h3{margin:0 0 8px 0;color:var(--muted);font-size:13px}
+.channel-list ul{list-style:none;padding:0;margin:0}
+.channel-list li{margin-bottom:6px}
+.channel-list button{color:#bfc9d9;padding:6px 8px;border-radius:6px;text-align:left;width:100%;background:transparent;border:none}
+.channel-list li.selected button{background:rgba(88,101,242,0.14);color:var(--primary);font-weight:600}
+.channel-list button:hover{background:rgba(255,255,255,0.03);cursor:pointer}
+.channel-list .channel-name::before{content:'# ';color:var(--muted);margin-right:6px}
+.new-channel{margin-top:12px;display:flex;gap:6px}
+.new-channel input{flex:1;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+.new-channel button{padding:8px 10px;border-radius:6px;background:var(--primary);border:none;color:white}
+
+/* Main chat area */
+.main-panel{display:flex;flex-direction:column;height:100vh}
+header{background:linear-gradient(90deg,rgba(0,0,0,0.2),transparent);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
+header h1{margin:0;font-size:18px}
+.user-info{font-size:13px;color:var(--muted)}
+
+main{flex:1;overflow:hidden;padding:0 12px 12px}
+.chat-window{height:100%;display:flex;flex-direction:column}
+.messages{flex:1;overflow:auto;padding:18px;background:transparent}
+
+/* message row */
+.message-row{display:flex;gap:10px;align-items:flex-start;margin-bottom:12px}
+.message-row.mine{flex-direction:row-reverse}
+.avatar{width:40px;height:40px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600}
+.message-body{max-width:75%;}
+.meta{font-size:13px;color:var(--muted);margin-bottom:6px;display:flex;gap:8px;align-items:center}
+.meta strong{color:#fff}
+.text{background:var(--message-bg);padding:10px 12px;border-radius:8px;color:#e6eef6}
+.message-row.mine .text{background:var(--mine-bg)}
+
+/* Edited marker */
+.meta .edited{font-size:12px;color:var(--muted);margin-left:8px}
+
+/* Small inline controls for editing */
+.message-body button{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--primary);padding:6px 8px;border-radius:6px}
+.message-body button:hover{cursor:pointer;opacity:0.9}
+
+/* Pending (local) writes indicator */
+.meta .pending{font-size:12px;color:#d6bf6a;margin-left:8px;font-style:italic}
+
+/* Reply quote styling */
+.reply-quote{background:rgba(255,255,255,0.02);padding:8px;border-left:3px solid rgba(255,255,255,0.04);margin-bottom:6px;border-radius:4px}
+.reply-quote .reply-author{font-size:12px;color:var(--muted);font-weight:600}
+.reply-quote .reply-text{font-size:13px;color:var(--muted);margin-top:4px}
+
+/* Message options that appear when clicking a message */
+.message-options{display:flex;gap:8px;margin-top:8px}
+.message-options button{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--primary);padding:6px 8px;border-radius:6px}
+.message-options button:hover{background:rgba(255,255,255,0.02);cursor:pointer}
+
+/* input bar */
+.message-input{display:flex;padding:12px;background:linear-gradient(#0b1116,#0b1116);border-top:1px solid rgba(255,255,255,0.03)}
+.message-input input{flex:1;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+.message-input button{margin-left:8px;padding:10px 14px;border-radius:10px;background:var(--primary);border:none;color:white}
+
+.login-screen{padding:40px;text-align:center}
+.login-screen input{padding:8px;margin:8px;border-radius:6px}
