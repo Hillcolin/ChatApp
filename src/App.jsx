@@ -41,7 +41,7 @@ export default function App(){
     <div className="app-root" style={{display:'grid',gridTemplateColumns:'220px 1fr',height:'100vh'}}>
       <ChannelList user={user} selectedChannel={channel} onSelect={setChannel} />
 
-      <div style={{display:'flex',flexDirection:'column'}}>
+        <div className="main-column">
         <header>
           <h1>ChatApp</h1>
           <div className="user-info">Signed in as <strong>{user.displayName || 'Anonymous'}</strong>
