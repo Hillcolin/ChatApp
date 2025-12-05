@@ -59,39 +59,51 @@ export async function recordIncomingMessageLatency(message, receiverUid){
 
     const now = Date.now()
 
-    // Prefer server-based timestamp if available (more robust than relying on client clocks).
-    // `createdAt` is a Firestore Timestamp with `.toMillis()` when resolved.
-    let latencyMs = null
+    // Try to compute three useful metrics when possible:
+    // - sendToServerMs: how long the sender took to reach the server (serverTs - clientSentAt)
+    // - serverToReceiveMs: how long between server write and this client's receipt (now - serverTs)
+    // - totalMs: end-to-end from client send to this client's receipt (now - clientSentAt)
+    let serverMillis = null
+    let clientMillis = null
     try{
       if(message.createdAt && typeof message.createdAt.toMillis === 'function'){
-        const serverMillis = message.createdAt.toMillis()
-        latencyMs = now - serverMillis
-      }else if(message.clientSentAt){
-        // fallback to sender-provided clientSentAt
-        latencyMs = now - message.clientSentAt
-      } else {
-        return // nothing to measure
+        serverMillis = message.createdAt.toMillis()
       }
-    }catch(e){
-      // if something goes wrong computing, bail out
-      return
+    }catch(e){ /* ignore */ }
+    try{
+      if(typeof message.clientSentAt === 'number') clientMillis = message.clientSentAt
+      else if(message.clientSentAt && typeof message.clientSentAt.toMillis === 'function') clientMillis = message.clientSentAt.toMillis()
+    }catch(e){ /* ignore */ }
+
+    const results = {}
+    if(clientMillis != null && serverMillis != null){
+      const sendToServerMs = serverMillis - clientMillis
+      const serverToReceiveMs = now - serverMillis
+      const totalMs = now - clientMillis
+      // sanity checks
+      if(sendToServerMs < 0 || sendToServerMs > 24 * 3600 * 1000) return
+      if(serverToReceiveMs < 0 || serverToReceiveMs > 24 * 3600 * 1000) return
+      if(totalMs < 0 || totalMs > 24 * 3600 * 1000) return
+      results.sendToServerMs = sendToServerMs
+      results.serverToReceiveMs = serverToReceiveMs
+      results.totalMs = totalMs
+    }else if(clientMillis != null){
+      const totalMs = now - clientMillis
+      if(totalMs < 0 || totalMs > 24 * 3600 * 1000) return
+      results.totalMs = totalMs
+    }else if(serverMillis != null){
+      const serverToReceiveMs = now - serverMillis
+      if(serverToReceiveMs < 0 || serverToReceiveMs > 24 * 3600 * 1000) return
+      results.serverToReceiveMs = serverToReceiveMs
+    }else{
+      return // nothing measurable
     }
 
-    // sanity-check the result: ignore negatives or implausibly large values (> 1 day)
-    if(typeof latencyMs !== 'number' || latencyMs < 0 || latencyMs > 24 * 3600 * 1000) return
-    // Only record the end result (latency in ms) to the metrics collection.
-    // This avoids storing extra fields unrelated to the timing result.
+    // Attach some context and write via logMetric (non-blocking wrapper)
     try{
-      await addDoc(metricsCol, {
-        type: 'message_latency',
-        latencyMs,
-        ts: serverTimestamp(),
-        clientTs: now
-      })
-      // Mark as recorded so subsequent snapshots don't create duplicates
+      await logMetric('message_latency', { messageId: message.id, senderUid: message.uid, receiverUid, channelId: message.channelId || null, ...results })
       try{ recordedLatency.set(message.id, Date.now()) }catch(e){}
     }catch(e){
-      // fallback to non-blocking console warning if metric write fails
       console.warn('Failed to write message_latency metric', e)
     }
   }catch(e){
