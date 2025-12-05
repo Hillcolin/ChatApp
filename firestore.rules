@@ -26,83 +26,45 @@ service cloud.firestore {
       return n is string && n.size() > 0 && n.size() <= 100;
     }
 
-    // Channels: enforce membership lists and restrict message access to members.
+    // Channels: allow anyone to list channels (for login screen visualization),
+    // but require authentication for creating/updating/deleting.
     match /channels/{channelId} {
-      // channel metadata can be read by signed-in users (UI may list channels),
-      // but actual message access below is enforced against `members`.
-      allow read: if isSignedIn();
+      allow read: if true;  // Allow unauthenticated users to count channels
 
-      // Creating a channel must include an initial `members` array (emails)
-      // and the creating user's email must be present. Creator must set
-      // `createdBy` to their uid.
       allow create: if isSignedIn()
-        && request.resource.data.keys().hasAll(['name','members','createdBy'])
-        && isValidChannelName(request.resource.data.name)
-        && request.resource.data.createdBy == request.auth.uid
-        && (request.resource.data.members is list)
-        && request.resource.data.members.size() > 0
-        && request.resource.data.members.size() <= 200
-        // creator must include themselves (by email or uid) in members
-        && (
-          (request.auth.token.email in request.resource.data.members)
-          || (request.auth.uid in request.resource.data.members)
-        );
+        && request.resource.data.keys().hasAll(['name'])
+        && isValidChannelName(request.resource.data.name);
 
-      // Allow updates to channel metadata by the creator only, and allow
-      // existing members to update only the `members` array (invite others).
+      // Allow update/delete only to the creator if createdBy is present, otherwise allow updates from auth users (simple behavior).
       allow update: if isSignedIn() && (
-        // Creator may update metadata and members
+        // Creator (or when createdBy not set) may update channel metadata (name, createdBy, createdAt, lastMessageAt)
         (
-          resource.data.createdBy == request.auth.uid
-          && request.resource.data.keys().hasOnly(['name','createdBy','createdAt','lastMessageAt','members'])
+          (resource.data.createdBy == request.auth.uid || !resource.data.keys().hasAny(['createdBy']))
+          && request.resource.data.keys().hasOnly(['name','createdBy','createdAt','lastMessageAt'])
           && isValidChannelName(request.resource.data.name)
           && (request.resource.data.lastMessageAt is timestamp || request.resource.data.lastMessageAt == null)
-          // if members provided, validate basic list shape and size
-          && (!('members' in request.resource.data) || ((request.resource.data.members is list) && request.resource.data.members.size() <= 200))
         )
-        // Existing members may only update the members list
+        // Allow any signed-in user to update only lastMessageAt (used when posting messages)
         || (
-          request.resource.data.keys().hasOnly(['members'])
-          && (request.resource.data.members is list)
-          && request.resource.data.members.size() <= 200
-          // requester must already be listed as a member (by email or uid)
-          && (
-            (request.auth.token.email in resource.data.members)
-            || (request.auth.uid in resource.data.members)
-          )
+          request.resource.data.keys().hasOnly(['lastMessageAt'])
+          && (request.resource.data.lastMessageAt is timestamp || request.resource.data.lastMessageAt == null)
         )
       );
 
-      // Deletion allowed only to creator
-      allow delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
+      allow delete: if isSignedIn() && (resource.data.createdBy == request.auth.uid || !resource.data.keys().hasAny(['createdBy']));
 
-      // Messages stored as subcollection under the channel. Only channel
-      // members (by email) are allowed to read or create messages.
+      // Messages stored as subcollection under the channel
       match /messages/{messageId} {
-        // read allowed if caller is listed as a member (by email or uid)
-        allow read: if isSignedIn()
-          && exists(/databases/$(database)/documents/channels/$(channelId))
-          && (get(/databases/$(database)/documents/channels/$(channelId)).data.members is list)
-          && (
-            (request.auth.token.email in get(/databases/$(database)/documents/channels/$(channelId)).data.members)
-            || (request.auth.uid in get(/databases/$(database)/documents/channels/$(channelId)).data.members)
-          );
+        allow read: if isSignedIn();
 
-        // create allowed only for members and when uid matches auth
         allow create: if isSignedIn()
-          && exists(/databases/$(database)/documents/channels/$(channelId))
-          && (get(/databases/$(database)/documents/channels/$(channelId)).data.members is list)
-          && (
-            (request.auth.token.email in get(/databases/$(database)/documents/channels/$(channelId)).data.members)
-            || (request.auth.uid in get(/databases/$(database)/documents/channels/$(channelId)).data.members)
-          )
           && request.resource.data.keys().hasAll(['text','username','uid'])
           && isValidText(request.resource.data.text)
           && (request.resource.data.username is string)
           && (request.resource.data.uid is string)
           && request.resource.data.uid == request.auth.uid
           && (request.resource.data.createdAt is timestamp || request.resource.data.createdAt == null)
-          // if replyTo provided, validate its structure
+          // if replyTo provided, validate its structure (be permissive about top-level keys)
           && (
             !('replyTo' in request.resource.data)
             || (
@@ -114,7 +76,13 @@ service cloud.firestore {
             )
           );
 
-        // updates allowed only to original author and only valid edits
+        // Allow the original author to edit their message. Editing may include
+        // setting an `editedAt` timestamp so clients can show an "edited" marker.
+        // We must allow the existing immutable fields (uid, username, createdAt)
+        // to remain present in the resulting document; update requests typically
+        // include those unchanged fields. Therefore we validate that those fields
+        // are not changed and that only `text` (and optionally `editedAt`) are
+        // modified.
         allow update: if isSignedIn()
           && resource.data.uid == request.auth.uid
           // ensure immutable fields are unchanged
@@ -123,23 +91,10 @@ service cloud.firestore {
           && request.resource.data.createdAt == resource.data.createdAt
           // text must be valid
           && isValidText(request.resource.data.text)
-          // if provided, editedAt must be a timestamp
-          && (request.resource.data.editedAt is timestamp || request.resource.data.editedAt == null)
-          // and the editor must be a member of the parent channel
-          && (get(/databases/$(database)/documents/channels/$(channelId)).data.members is list)
-          && (
-            (request.auth.token.email in get(/databases/$(database)/documents/channels/$(channelId)).data.members)
-            || (request.auth.uid in get(/databases/$(database)/documents/channels/$(channelId)).data.members)
-          );
+          // if provided, editedAt must be a timestamp (client may omit it and rely on serverTimestamp)
+          && (request.resource.data.editedAt is timestamp || request.resource.data.editedAt == null);
 
-        // delete allowed only to author (and they must be a member)
-        allow delete: if isSignedIn()
-          && resource.data.uid == request.auth.uid
-          && (get(/databases/$(database)/documents/channels/$(channelId)).data.members is list)
-          && (
-            (request.auth.token.email in get(/databases/$(database)/documents/channels/$(channelId)).data.members)
-            || (request.auth.uid in get(/databases/$(database)/documents/channels/$(channelId)).data.members)
-          );
+        allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
       }
     }
 

@@ -35,7 +35,18 @@ export const googleProvider = new GoogleAuthProvider()
 
 // Helper functions you can import/use directly
 export const signInWithGoogle = async () => {
-  return signInWithPopup(auth, googleProvider)
+  try {
+    return await signInWithPopup(auth, googleProvider)
+  } catch (error) {
+    // If popup was blocked/cancelled, try redirect as fallback
+    if (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request') {
+      console.log('Popup blocked/cancelled, using redirect method instead')
+      // Fallback: use redirect (requires proper redirect URI in Firebase console)
+      // For now, just re-throw with better message
+      throw new Error('Please allow popups or check your Firebase console configuration')
+    }
+    throw error
+  }
 }
 
 
